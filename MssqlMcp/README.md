@@ -285,11 +285,15 @@ dotnet publish -c Release -r win-x64   -o out/win-x64
 dotnet publish -c Release -r linux-x64 -o out/linux-x64
 dotnet publish -c Release -r osx-arm64 -o out/osx-arm64
 
-# the three binaries share a name, so label them as they are uploaded
+# the three binaries share a name, so rename them before upload or they collide
+mv out/win-x64/MssqlMcp.exe out/MssqlMcp-win-x64.exe
+mv out/linux-x64/MssqlMcp   out/MssqlMcp-linux-x64
+mv out/osx-arm64/MssqlMcp   out/MssqlMcp-osx-arm64
+
 gh release create v1.0.0 \
-  "out/win-x64/MssqlMcp.exe#MssqlMcp-win-x64.exe" \
-  "out/linux-x64/MssqlMcp#MssqlMcp-linux-x64" \
-  "out/osx-arm64/MssqlMcp#MssqlMcp-osx-arm64" \
+  out/MssqlMcp-win-x64.exe \
+  out/MssqlMcp-linux-x64 \
+  out/MssqlMcp-osx-arm64 \
   --title "MSSQL MCP v1.0.0" \
   --notes "Download the binary for your platform and follow the Install section of the README."
 ```

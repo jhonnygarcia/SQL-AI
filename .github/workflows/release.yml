@@ -27,14 +27,18 @@ jobs:
           for rid in win-x64 linux-x64 osx-arm64; do
             dotnet publish -c Release -r "$rid" -o "out/$rid" -p:Version="$version"
           done
+          # the three binaries share a name; rename before upload or they collide in the release
+          mv out/win-x64/MssqlMcp.exe out/MssqlMcp-win-x64.exe
+          mv out/linux-x64/MssqlMcp   out/MssqlMcp-linux-x64
+          mv out/osx-arm64/MssqlMcp   out/MssqlMcp-osx-arm64
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "out/win-x64/MssqlMcp.exe#MssqlMcp-win-x64.exe" \
-            "out/linux-x64/MssqlMcp#MssqlMcp-linux-x64" \
-            "out/osx-arm64/MssqlMcp#MssqlMcp-osx-arm64" \
+            out/MssqlMcp-win-x64.exe \
+            out/MssqlMcp-linux-x64 \
+            out/MssqlMcp-osx-arm64 \
             --title "MSSQL MCP $GITHUB_REF_NAME" \
             --generate-notes
