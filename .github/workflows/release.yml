@@ -1,0 +1,40 @@
+name: Release MssqlMcp
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # ponytail: one job cross-publishes all three RIDs. Self-contained (not AOT) needs no native
+    # toolchain, so a matrix of runners would only buy slower, more expensive builds.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: MssqlMcp/MssqlMcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for rid in win-x64 linux-x64 osx-arm64; do
+            dotnet publish -c Release -r "$rid" -o "out/$rid" -p:Version="$version"
+          done
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "out/win-x64/MssqlMcp.exe#MssqlMcp-win-x64.exe" \
+            "out/linux-x64/MssqlMcp#MssqlMcp-linux-x64" \
+            "out/osx-arm64/MssqlMcp#MssqlMcp-osx-arm64" \
+            --title "MSSQL MCP $GITHUB_REF_NAME" \
+            --generate-notes

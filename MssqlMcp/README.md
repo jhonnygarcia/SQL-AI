@@ -20,6 +20,71 @@ This project is a .NET 8 console application implementing a Model Context Protoc
 - **Logging**: Console logging using Microsoft.Extensions.Logging.
 - **Unit Tests**: xUnit-based unit tests for all major components.
 
+## Install
+
+Download the binary for your platform from the [Releases page](../../releases) and put it anywhere
+you like — it is self-contained, so **no .NET runtime is required**.
+
+| Platform | File |
+| --- | --- |
+| Windows | `MssqlMcp.exe` |
+| Linux | `MssqlMcp` (`chmod +x MssqlMcp`) |
+| macOS (Apple Silicon) | `MssqlMcp` (`chmod +x MssqlMcp`) |
+
+On Windows the first run shows a SmartScreen warning because the binary is unsigned — choose
+"More info" > "Run anyway". On macOS, run `xattr -d com.apple.quarantine MssqlMcp` once.
+
+Then point your MCP client at that path and give it a connection string, as shown below. Every
+client takes the same two things: the path to the executable, and `ConnectionStrings__<name>`
+environment variables — one per database you want to expose.
+
+### Claude Code
+
+Add the server with the CLI:
+
+```sh
+claude mcp add mssql --env ConnectionStrings__sales="Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True" -- C:\tools\MssqlMcp.exe
+```
+
+Or commit a `.mcp.json` at the root of a repo so everyone on the team gets it:
+
+```json
+{
+  "mcpServers": {
+    "mssql": {
+      "command": "C:\\tools\\MssqlMcp.exe",
+      "env": {
+        "ConnectionStrings__sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True",
+        "ConnectionStrings__hr": "Server=.;Database=HR;Trusted_Connection=True;TrustServerCertificate=True"
+      }
+    }
+  }
+}
+```
+
+Check it loaded with `/mcp` inside Claude Code, then ask "using mssql, list the tables in sales".
+
+### opencode
+
+Add it to `opencode.json` in the project, or to `~/.config/opencode/opencode.json` to have it
+everywhere:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mssql": {
+      "type": "local",
+      "command": ["C:\\tools\\MssqlMcp.exe"],
+      "enabled": true,
+      "environment": {
+        "ConnectionStrings__sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True"
+      }
+    }
+  }
+}
+```
+
 ## Getting Started
 
 ### Prerequisites
@@ -149,6 +214,37 @@ Add a new MCP Server with the following settings:
 ---
 
 Save the file, start a new Chat, you'll see the "Tools" icon, it should list 8 MSSQL MCP tools.
+
+# Cutting a release
+
+Push a `v*` tag and `.github/workflows/release.yml` builds the three binaries and creates the GitHub
+release for you:
+
+```sh
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The manual equivalent, if you'd rather do it by hand: publishing produces one self-contained single-file executable per platform (~76 MB each — that is
+the price of not requiring a .NET runtime on the user's machine). Trimming is deliberately off:
+`Microsoft.Data.SqlClient` breaks when trimmed.
+
+```sh
+cd MssqlMcp/MssqlMcp
+dotnet publish -c Release -r win-x64   -o out/win-x64
+dotnet publish -c Release -r linux-x64 -o out/linux-x64
+dotnet publish -c Release -r osx-arm64 -o out/osx-arm64
+
+# the three binaries share a name, so label them as they are uploaded
+gh release create v1.0.0 \
+  "out/win-x64/MssqlMcp.exe#MssqlMcp-win-x64.exe" \
+  "out/linux-x64/MssqlMcp#MssqlMcp-linux-x64" \
+  "out/osx-arm64/MssqlMcp#MssqlMcp-osx-arm64" \
+  --title "MSSQL MCP v1.0.0" \
+  --notes "Download the binary for your platform and follow the Install section of the README."
+```
+
+Bump `AssemblyVersion` / `FileVersion` / `InformationalVersion` in `MssqlMcp.csproj` to match the tag
+before publishing.
 
 # Troubleshooting
 
