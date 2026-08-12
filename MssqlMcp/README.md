@@ -22,31 +22,60 @@ This project is a .NET 8 console application implementing a Model Context Protoc
 
 ## Install
 
-Download the binary for your platform from the [Releases page](../../releases) and put it anywhere
-you like — it is self-contained, so **no .NET runtime is required**.
+You need three things: the binary, a connection string, and one config entry in your MCP client.
+No .NET runtime, no cloning this repo, no build step — the binary ships everything it needs.
 
-| Platform | File |
+### Step 1 — Download the binary
+
+Grab the file for your platform from the [Releases page](../../releases):
+
+| Platform | Asset | After downloading |
+| --- | --- | --- |
+| Windows | `MssqlMcp-win-x64.exe` | rename to `MssqlMcp.exe` if you like |
+| Linux | `MssqlMcp-linux-x64` | `chmod +x MssqlMcp-linux-x64` |
+| macOS (Apple Silicon) | `MssqlMcp-osx-arm64` | `chmod +x MssqlMcp-osx-arm64` |
+
+Put it in a stable location — you will reference this **absolute path** in the config, so a folder
+that does not move: `C:\tools\MssqlMcp.exe` on Windows, `~/.local/bin/MssqlMcp` on Linux/macOS.
+
+The binary is unsigned, so the OS warns you the first time:
+
+- **Windows**: SmartScreen shows "Windows protected your PC" > "More info" > "Run anyway".
+- **macOS**: run `xattr -d com.apple.quarantine ~/.local/bin/MssqlMcp` once, otherwise it is killed
+  on launch and the client just reports that the server failed to start.
+
+### Step 2 — Write your connection string
+
+Each database you expose gets a name and a connection string. The name is what you say to the
+agent ("list the tables in **sales**"); the connection string is standard ADO.NET:
+
+| Scenario | Connection string |
 | --- | --- |
-| Windows | `MssqlMcp.exe` |
-| Linux | `MssqlMcp` (`chmod +x MssqlMcp`) |
-| macOS (Apple Silicon) | `MssqlMcp` (`chmod +x MssqlMcp`) |
+| Local SQL Server, Windows auth | `Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True` |
+| SQL Server, SQL login | `Server=myhost,1433;Database=Sales;User Id=sa;Password=***;TrustServerCertificate=True` |
+| Azure SQL, Entra ID | `Server=tcp:myserver.database.windows.net,1433;Initial Catalog=Sales;Encrypt=Mandatory;Authentication=Active Directory Default` |
 
-On Windows the first run shows a SmartScreen warning because the binary is unsigned — choose
-"More info" > "Run anyway". On macOS, run `xattr -d com.apple.quarantine MssqlMcp` once.
+The server reads them from environment variables named `ConnectionStrings__<name>` — note the
+**double underscore**. `ConnectionStrings__sales` registers a database called `sales`.
 
-Then point your MCP client at that path and give it a connection string, as shown below. Every
-client takes the same two things: the path to the executable, and `ConnectionStrings__<name>`
-environment variables — one per database you want to expose.
+With exactly one database configured you can omit the `database` argument in every tool call. With
+two or more it becomes required, and a call that leaves it out comes back with the list of names.
 
-### Claude Code
+### Step 3a — Configure Claude Code
 
-Add the server with the CLI:
+The fastest path is the CLI, which writes the config for you:
 
 ```sh
-claude mcp add mssql --env ConnectionStrings__sales="Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True" -- C:\tools\MssqlMcp.exe
+claude mcp add mssql \
+  --env ConnectionStrings__sales="Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True" \
+  -- C:\tools\MssqlMcp.exe
 ```
 
-Or commit a `.mcp.json` at the root of a repo so everyone on the team gets it:
+That registers it for the current project only. Add `-s user` to make it available in every project
+on your machine.
+
+To share it with a team instead, commit a `.mcp.json` at the root of the repo — everyone who opens
+it gets prompted to enable the server:
 
 ```json
 {
@@ -62,12 +91,16 @@ Or commit a `.mcp.json` at the root of a repo so everyone on the team gets it:
 }
 ```
 
-Check it loaded with `/mcp` inside Claude Code, then ask "using mssql, list the tables in sales".
+Backslashes in Windows paths must be doubled inside JSON. Do not commit a `.mcp.json` containing a
+password — use Windows auth, Entra ID, or `${ENV_VAR}` expansion for shared files.
 
-### opencode
+### Step 3b — Configure opencode
 
-Add it to `opencode.json` in the project, or to `~/.config/opencode/opencode.json` to have it
-everywhere:
+opencode has no add command; you edit JSON directly. For one project, create `opencode.json` next
+to the code. To have it everywhere, edit the global config instead:
+
+- Linux/macOS: `~/.config/opencode/opencode.json`
+- Windows: `%USERPROFILE%\.config\opencode\opencode.json`
 
 ```json
 {
@@ -78,12 +111,30 @@ everywhere:
       "command": ["C:\\tools\\MssqlMcp.exe"],
       "enabled": true,
       "environment": {
-        "ConnectionStrings__sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True"
+        "ConnectionStrings__sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True",
+        "ConnectionStrings__hr": "Server=.;Database=HR;Trusted_Connection=True;TrustServerCertificate=True"
       }
     }
   }
 }
 ```
+
+Note the shape differs from Claude Code: the section is `mcp` (not `mcpServers`), `command` is an
+**array** whose first element is the executable, and the variables go under `environment` (not
+`env`).
+
+### Step 4 — Verify
+
+Restart the client, then:
+
+- **Claude Code**: run `/mcp`. `mssql` should be listed as connected with 8 tools.
+- **opencode**: the tools appear in the session; `opencode` logs a startup error for the server if
+  the path or connection string is wrong.
+
+Then ask the agent: *"using mssql, list the tables in sales"*. If it answers with your tables, you
+are done. If the server does not start, see [Troubleshooting](#troubleshooting) — the most common
+causes are a wrong absolute path, an unquarantined macOS binary, and a single underscore instead of
+a double one in `ConnectionStrings__sales`.
 
 ## Getting Started
 
@@ -247,6 +298,29 @@ Bump `AssemblyVersion` / `FileVersion` / `InformationalVersion` in `MssqlMcp.csp
 before publishing.
 
 # Troubleshooting
+
+**The client says the server failed to start.** Run the binary by hand from a terminal — it prints
+its startup log to stderr and waits for input, which tells you far more than the client does:
+
+```sh
+ConnectionStrings__sales="Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True" ./MssqlMcp
+```
+
+You should see "Application started". Press Ctrl+C to stop it. If that works but the client still
+fails, the problem is the config: check the absolute path, and that Windows backslashes are doubled
+in JSON.
+
+**The tools are listed but every call errors.** The connection string is reaching the server but the
+database is refusing it. The error text comes straight from SQL Server — a login failure, an
+unreachable host, or a certificate complaint (add `TrustServerCertificate=True` for a local server
+with a self-signed certificate).
+
+**`ListDatabases` returns nothing, or calls complain about a missing `database` argument.** The
+environment variable name is wrong. It is `ConnectionStrings__sales` with a **double** underscore;
+a single one is silently ignored.
+
+**macOS kills the binary on launch.** It is quarantined because it is unsigned:
+`xattr -d com.apple.quarantine MssqlMcp`.
 
 1. If you get a "Task canceled" error using "Active Directory Default", try "Active Directory Interactive".
 2. With several Azure SQL databases configured, prefer `Authentication=Active Directory Default` over

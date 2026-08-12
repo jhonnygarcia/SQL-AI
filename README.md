@@ -71,8 +71,12 @@ https://github.com/Azure-Samples/azure-sql-langchain
 ### MSSQL MCP Server
 
 A Model Context Protocol (MCP) server for MSSQL Databases using the official [MCP C# SDK](https://github.com/modelcontextprotocol/csharp-sdk).
+It lets an agent list, describe, query and modify your tables.
 
-https://github.com/Azure-Samples/SQL-AI-samples/tree/main/MssqlMcp
+- **To use it**: download a binary from [Releases](../../releases) and follow the step-by-step
+  [install instructions](MssqlMcp/README.md#install) — Claude Code, opencode, VS Code and
+  Claude Desktop are all covered. No .NET runtime needed.
+- **To work on it**: [MssqlMcp/](MssqlMcp/)
 
 ## End-To-End Samples
 
