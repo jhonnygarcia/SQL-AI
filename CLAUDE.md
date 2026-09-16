@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo shape
 
-`SQL-AI-samples` is a collection of independent Azure SQL + AI samples. Most top-level
-directories (`AzureSQLACSSamples/`, `AzureSQLDatabase/`, `AzureSQLFaiss/`,
-`AzureSQLPromptFlowSamples/`) are standalone Jupyter notebooks / T-SQL scripts with no shared
-build. `MssqlMcp/` is the only compiled project and is where active work happens
-(branch `mssql-mcp`). Samples do not depend on each other — scope changes to one directory.
+The repo holds a single project: `MssqlMcp/`, an MCP server for SQL Server / Azure SQL (originally
+forked from Microsoft's `SQL-AI-samples`; the other samples were removed). The root `README.md` is
+the user-facing documentation (install, client config, troubleshooting, build, release) — keep it in
+sync when tools or configuration change. `.github/workflows/release.yml` publishes binaries on `v*`
+tags.
 
 ## MssqlMcp — MCP server for SQL Server / Azure SQL
 
