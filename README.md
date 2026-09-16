@@ -1,152 +1,203 @@
-# SQL-AI-samples
+# MSSQL MCP Server (.NET 8)
 
-## About this repo
+A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an AI agent list,
+describe, query and modify tables in SQL Server and Azure SQL. It speaks MCP over stdio and can
+work with **several databases at once**, each configured under a name you choose.
 
-This repo hosts samples meant to help design [AI applications built on data from an Azure SQL Database](https://aka.ms/sql-ai). We illustrate key technical concepts and demonstrate workflows that integrate Azure SQL data with other popular AI application components inside and outside of Azure.
+Built on the official [MCP C# SDK](https://github.com/modelcontextprotocol/csharp-sdk). The source
+lives in [`MssqlMcp/`](MssqlMcp).
 
-- [AI Features Samples](#ai-features-samples)
-    - [Azure SQL + Azure Cognitive Services](#azure-sql--azure-cognitive-services)
-    - [Azure SQL + Azure Promptflow](#azure-sql--azure-promptflow)
-    - [Azure SQL + Azure OpenAI](#azure-sql--azure-openai)
-    - [Generating SQL for Azure SQL Database using Vanna.AI](#generating-sql-for-azure-sql-database-using-vannaai)
-    - [Retrieval Augmented Generation (T-SQL Sample)](#retrieval-augmented-generation-t-sql-sample)
-    - [Content Moderation](#content-moderation)
-    - [LangChain and Azure SQL Database](#langchain-and-azure-sql-database)
-- [End-To-End Samples](#end-to-end-samples)
-    - [Similar Content Finder](#similar-content-finder)
-    - [Session Conference Assistant](#session-conference-assistant)
-    - [Chatbot on your own data with LangChain and Chainlit](#chatbot-on-your-own-data-with-langchain-and-chainlit)
-    - [Chatbot on structured and unstructured data with Semantic Kernel](#chatbot-on-structured-and-unstructured-data-with-semantic-kernel)
-    - [Azure SQL DB Vectorizer](#azure-sql-db-vectorizer)
-    - [SQL Server Database Development using Prompts as T-SQL Development](#sql-server-database-development-using-prompts-as-t-sql-development)
-    - [Redis Vector Search Demo Application using ACRE and Cache Prefetching from Azure SQL with Azure Functions](#redis-vector-search-demo-application-using-acre-and-cache-prefetching-from-azure-sql-with-azure-functions)
-    - [Similarity Search with FAISS and Azure SQL](#similarity-search-with-faiss-and-azure-sql)
-    - [Build your own IVFFlat index with KMeans](#build-your-own-ivfflat-index-with-kmeans)
-- [Workshops](#workshops)
-    - [Build an AI App GraphQL Endpoint with SQL DB in Fabric​](#build-an-ai-app-graphql-endpoint-with-sql-db-in-fabric​)     
+## Tools
 
-## AI Features Samples
+| Tool | |
+| --- | --- |
+| `ListDatabases` | names of the configured databases |
+| `ListTables` | tables in a database |
+| `DescribeTable` | columns, types and keys of a table |
+| `ReadData` | run a query |
+| `InsertData` / `UpdateData` | write rows |
+| `CreateTable` / `DropTable` | change the schema |
 
-### Azure SQL + Azure Cognitive Services
+Every tool except `ListDatabases` takes a `database` argument. With one database configured you can
+omit it; with two or more it is required, and a call without it returns the list of names.
 
-The [AzureSQL_CogSearch_IntegratedVectorization](https://github.com/Azure-Samples/SQL-AI-samples/blob/main/AzureSQLACSSamples/src/AzureSQL_CogSearch_IntegratedVectorization.ipynb) sample notebook shows a simple AI application that recommends products based on a database of user reviews, using Azure Cognitive Search to store and search the relevant data. It highlights new preview features of Azure Cognitive Search, including automatic chunking and integrated vectorization of user queries.
+## Install
 
-### Azure SQL + Azure Promptflow 
+### 1. Download
 
-The [AzureSQL_Prompt_Flow](https://github.com/Azure-Samples/SQL-AI-samples/tree/main/AzureSQLPromptFlowSamples) sample shows an E2E example of how to build AI applications with Prompt Flow, Azure Cognitive Search, and your own data in Azure SQL database. It includes instructions on how to index your data with Azure Cognitive Search, a sample Prompt Flow local development that links everything together with Azure OpenAI connections, and also how to create an endpoint of the flow to an Azure ML workspace.
+Grab your platform's binary from [Releases](https://github.com/jhonnygarcia/SQL-AI/releases). It is
+self-contained, so **no .NET runtime is needed**.
 
-### Azure SQL + Azure OpenAI 
+| Platform | Asset | |
+| --- | --- | --- |
+| Windows | `MssqlMcp-win-x64.exe` | SmartScreen warns on first run: "More info" > "Run anyway" |
+| Linux | `MssqlMcp-linux-x64` | `chmod +x` it |
+| macOS (Apple Silicon) | `MssqlMcp-osx-arm64` | `chmod +x` it, then `xattr -d com.apple.quarantine` |
 
-This example shows how to use Azure OpenAI from Azure SQL database to get the vector embeddings of any chosen text, and then calculate the cosine similarity against the Wikipedia articles (for which vector embeddings have been already calculated,) to find the articles that covers topics that are close - or similar - to the provided text.
+Put it somewhere stable — you reference its **absolute path** in the config below. (Prefer to build
+it yourself? See [Build from source](#build-from-source).)
 
-https://github.com/Azure-Samples/azure-sql-db-openai
+### 2. Configure your client
 
-### Generating SQL for Azure SQL Database using Vanna.AI
-This notebook runs through the process of using the `vanna` Python package to generate SQL using AI (RAG + LLMs) including connecting to a database and training.
+Databases come from environment variables named `ConnectionStrings__<name>` (**double** underscore),
+one per database. The name is what you say to the agent: "list the tables in *sales*".
 
-https://github.com/Azure-Samples/SQL-AI-samples/blob/main/AzureSQLDatabase/Vanna.ai/vanna_and_sql.ipynb
+**Claude Code** — the CLI writes the config for you (add `-s user` for all projects):
 
-### Retrieval Augmented Generation (T-SQL Sample)
+```sh
+claude mcp add mssql \
+  --env ConnectionStrings__sales="Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True" \
+  --env ConnectionStrings__hr="Server=.;Database=HR;Trusted_Connection=True;TrustServerCertificate=True" \
+  -- C:\tools\MssqlMcp.exe
+```
 
-In this repo you will find a step-by-step guide on how to use Azure SQL Database to do Retrieval Augmented Generation (RAG) using the data you have in Azure SQL and integrating with OpenAI, directly from the Azure SQL database itself. You'll be able to ask queries in natural language and get answers from the OpenAI GPT model, using the data you have in Azure SQL Database.
+**Claude Desktop** (File > Settings > Developer > Edit Config) and shared `.mcp.json` files use the
+same shape:
 
-https://github.com/Azure-Samples/azure-sql-db-chatbot
+```json
+{
+  "mcpServers": {
+    "mssql": {
+      "command": "C:\\tools\\MssqlMcp.exe",
+      "env": {
+        "ConnectionStrings__sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True",
+        "ConnectionStrings__hr": "Server=.;Database=HR;Trusted_Connection=True;TrustServerCertificate=True"
+      }
+    }
+  }
+}
+```
 
-### Content Moderation
+**opencode** — edit `opencode.json` in the project, or `~/.config/opencode/opencode.json`
+(`%USERPROFILE%\.config\opencode\opencode.json` on Windows) for all of them. The shape differs:
+`mcp` instead of `mcpServers`, `command` is an array, variables go under `environment`:
 
-In this folder are two T-SQL scripts that call Azure OpenAI Content Safety and Language AI. The Content Safety example will analyze a text string and return a severity in four categories: violence, sexual, self-harm, and hate. The Language AI script will analyze text and return what PII it found, what category of PII it is, and redact the results to obfuscate the PII in the original text string.
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mssql": {
+      "type": "local",
+      "command": ["C:\\tools\\MssqlMcp.exe"],
+      "enabled": true,
+      "environment": {
+        "ConnectionStrings__sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True"
+      }
+    }
+  }
+}
+```
 
-https://github.com/Azure-Samples/SQL-AI-samples/tree/main/AzureSQLDatabase/ContentModeration
+**VS Code** — Ctrl+Shift+P > "Preferences: Open Settings (JSON)", then add the server under
+`mcp.servers` with `"type": "stdio"` and the same `command` / `env` pair as Claude Desktop.
 
-### LangChain and Azure SQL Database
+Backslashes must be doubled inside JSON. Don't commit a password in a shared file — use Windows auth
+or Entra ID.
 
-This folder contains 2 python notebooks that use LangChain to create a NL2SQL agent against an Azure SQL Database. The notebooks use either Azure OpenAI or OpenAI for the LLM. To get started immedietly, you can create a codespace on this repository, use the terminal to change to the LangChain directory and follow one of the notebooks.
+Connection string examples:
 
-https://github.com/Azure-Samples/SQL-AI-samples/tree/main/AzureSQLDatabase/LangChain
+| Scenario | |
+| --- | --- |
+| Local SQL Server, Windows auth | `Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True` |
+| SQL login | `Server=myhost,1433;Database=Sales;User Id=sa;Password=***;TrustServerCertificate=True` |
+| Azure SQL, Entra ID | `Server=tcp:myserver.database.windows.net,1433;Initial Catalog=Sales;Encrypt=Mandatory;Authentication=Active Directory Default` |
 
-You can also use the Getting Started samples available on LangChain website, but using Azure SQL:
+### 3. Verify
 
-https://github.com/Azure-Samples/azure-sql-langchain
+Restart the client and run `/mcp` in Claude Code — `mssql` should show as connected with 8 tools.
+Then ask: *"using mssql, list the tables in sales"*.
 
-### MSSQL MCP Server
+## Configuration reference
 
-A Model Context Protocol (MCP) server that lets an agent list, describe, query and modify tables in
-SQL Server and Azure SQL. Download a binary from
-[Releases](https://github.com/jhonnygarcia/SQL-AI/releases) and follow the
-[install instructions](MssqlMcp/README.md#install) — Claude Code, opencode, VS Code and Claude
-Desktop are covered, and no .NET runtime is needed.
+Settings follow the standard .NET cascade; later sources override earlier ones:
 
-## End-To-End Samples
+1. `appsettings.json` next to the executable
+2. environment variables (`ConnectionStrings__<name>`)
+3. command-line arguments (`--ConnectionStrings:<name>=...`)
 
-### Similar Content Finder
+A bare `CONNECTION_STRING` environment variable is also honored and registers a database named
+`default`.
 
-OpenAI embeddings, and thus vectors, can be used to perform similarity search and create solution that provide customer with a better user experience, better search results and in general a more natural way to find relevant data in a reference dataset. Due to ability to provide an answer even when search request do not perfectly match a given content, similary search is ideal for creating recommenders. A fully working end-to-end sample is available here: 
+To use a file instead of environment variables, copy
+[`MssqlMcp/MssqlMcp/appsettings.example.json`](MssqlMcp/MssqlMcp/appsettings.example.json) to
+`appsettings.json` next to the executable (it is gitignored — it holds credentials):
 
-https://github.com/Azure-Samples/azure-sql-db-session-recommender
+```json
+{
+  "ConnectionStrings": {
+    "sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True",
+    "hr": "Server=.;Database=HR;Trusted_Connection=True;TrustServerCertificate=True"
+  }
+}
+```
 
-###  Session Conference Assistant
+## Troubleshooting
 
-This sample demonstrates how to build a session assistant using Jamstack, Retrieval Augmented Generation (RAG) and Event-Driven architecture, using Azure SQL DB to store and search vectors embeddings generated using OpenAI. The solution is built using Azure Static Web Apps, Azure Functions, Azure SQL Database, and Azure OpenAI. A fully working, production ready, version of this sample, that has been used at VS Live conferences, is available here: https://ai.microsofthq.vslive.com/
+**The server fails to start.** Run the binary by hand; it logs to stderr and waits for input:
 
-https://github.com/azure-samples/azure-sql-db-session-recommender-v2
+```sh
+ConnectionStrings__sales="Server=.;Database=Sales;..." ./MssqlMcp
+```
 
-### Chatbot on your own data with LangChain and Chainlit
+If you see "Application started" (Ctrl+C to stop), the binary is fine and the problem is the config:
+wrong absolute path, or single-quoted backslashes in JSON. On macOS a quarantined binary is killed
+silently — see the download table.
 
-Sample RAG pattern, with full UX, using Azure SQL DB, Langchain and Chainlit as demonstrated in the [#RAGHack](https://github.com/microsoft/RAG_Hack) conference. Full details and video recording available here: [RAG on Azure SQL Server](https://github.com/microsoft/RAG_Hack/discussions/53).
+**Tools appear but every call errors.** The message comes straight from SQL Server: a login failure,
+an unreachable host, or a certificate complaint (`TrustServerCertificate=True` for a local server
+with a self-signed certificate).
 
-https://github.com/Azure-Samples/azure-sql-db-rag-langchain-chainlit
+**A database seems missing.** Check the double underscore in `ConnectionStrings__sales` — a single
+one is ignored silently.
 
-### Chatbot on structured and unstructured data with Semantic Kernel
+**Azure SQL sign-in loops or prompts repeatedly.** Prefer `Authentication=Active Directory Default`
+over `Active Directory Interactive`, which prompts once per distinct connection string. If "Default"
+fails with "Task canceled", fall back to "Interactive".
 
-A chatbot that can answer using RAG and using SQL Queries to answer any question you may want to ask it, be it on unstructured data (eg: what is the common issue raised for product XYZ) or on structured data (eg: how many customers from Canada called the support line?). Built using Semantic Kernel.
+## Build from source
 
-https://github.com/Azure-Samples/azure-sql-db-chat-sk
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
-### Azure SQL DB Vectorizer
+```sh
+cd MssqlMcp
+dotnet build
+dotnet publish MssqlMcp -c Release -r win-x64 -o out   # or linux-x64 / osx-arm64
+```
 
-Quickly chunk text and generate embeddings at scale with data from Azure SQL. 
+Point your client's `command` at `out/MssqlMcp.exe` (or `out/MssqlMcp`).
 
-https://github.com/Azure-Samples/azure-sql-db-vectorizer
+### Tests
 
-###  SQL Server Database Development using Prompts as T-SQL Development
+Tests hit **real databases** — there is no fake. They create and drop GUID-suffixed `TestTable_*`
+tables, and need two databases so the multi-database tests can prove a call only touches the one it
+names:
 
-In this notebook, we will learn how to use prompts as a way to develop and test Transact-SQL (T-SQL) code for SQL Server databases. Prompts are natural language requests that can be converted into T-SQL statements by using Generative AI models, such as GPT-4. This can help us write code faster, easier, and more accurately, as well as learn from the generated code examples.
+```sh
+sqlcmd -S . -Q "IF DB_ID('test') IS NULL CREATE DATABASE test; IF DB_ID('test2') IS NULL CREATE DATABASE test2"
+```
 
-https://github.com/Azure-Samples/SQL-AI-samples/tree/main/AzureSQLDatabase/Prompt-Based%20T-SQL%20Database%20Development
+```sh
+export CONNECTION_STRING="Server=.;Database=test;Trusted_Connection=True;TrustServerCertificate=True"
+export CONNECTION_STRING_2="Server=.;Database=test2;Trusted_Connection=True;TrustServerCertificate=True"
+dotnet test                                          # all tests
+dotnet test --filter "FullyQualifiedName~ReadData"   # a single test or class
+```
 
-### Redis Vector Search Demo Application using ACRE and Cache Prefetching from Azure SQL with Azure Functions
+(On Windows `cmd`, use `SET CONNECTION_STRING=...` without quotes.)
 
-We based this project from our Product Search Demo which showcase how to use Redis as a Vector Db. We modified the demo by adding a Cache Prefetching pattern from Azure SQL to ACRE using Azure Functions. The Azure Function uses a SQL Trigger that will trigger for any updates that happen in the table.
+## Releasing
 
-https://github.com/AzureSQLDB/redis-azure-ai-demo
+Push a `v*` tag; [`.github/workflows/release.yml`](.github/workflows/release.yml) cross-publishes the
+three binaries and creates the GitHub release:
 
-### Similarity Search with FAISS and Azure SQL
+```sh
+git tag v1.0.1 && git push origin v1.0.1
+```
 
-This contains Python notebooks that integrate Azure SQL Database with FAISS for efficient similarity search. The notebooks demonstrate how to store and query data in Azure SQL, leveraging FAISS for fast similarity search. We will be demonstrating it with Wikipedia movie plots data stored in Azure SQL. We’ll encode these movie plots into dense vectors using a pre-trained model and then create a FAISS index to perform similarity searches.
-Learn more in the detail blog and video: https://aka.ms/azuresql-faiss
+The tag name becomes the assembly version. Each binary is ~76 MB because it bundles the runtime;
+trimming stays off since `Microsoft.Data.SqlClient` breaks under it.
 
-https://github.com/Azure-Samples/SQL-AI-samples/tree/main/AzureSQLFaiss
+## License
 
-### Build your own IVFFlat index with KMeans
-
-This sample demonstrates how to perform Approximate Nearest Neighbor (ANN) search on a vector column in Azure SQL DB using KMeans clustering, a technique known as IVFFlat or Cell-Probing. The project utilizes the SciKit Learn library for clustering, storing results in a SQL DB table to facilitate ANN search. This approach is beneficial for speeding up vector searches in Azure SQL DB. 
-
-## Workshops
-
-### Build an AI App GraphQL Endpoint with SQL DB in Fabric​
-
-This lab will guide you through creating a set of GraphQL RAG application APIs that use relational data, Azure OpenAI, and SQL DB in Fabric.
-
-https://github.com/Azure-Samples/sql-in-fabric-ai-embeddings-workshop
-
-## Getting started
-
-See the description in each sample for instructions (projects will have either a README file or instructions in the notebooks themselves.)
-
-## Trademarks
-
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+[MIT](LICENSE). Originally derived from Microsoft's
+[Azure-Samples/SQL-AI-samples](https://github.com/Azure-Samples/SQL-AI-samples).
