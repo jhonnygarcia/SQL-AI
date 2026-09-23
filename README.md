@@ -1,4 +1,4 @@
-# MSSQL MCP Server (.NET 8)
+# MSSQL MCP Server (.NET 10)
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an AI agent list,
 describe, query and modify tables in SQL Server and Azure SQL. It speaks MCP over stdio and can
@@ -9,17 +9,22 @@ lives in [`MssqlMcp/`](MssqlMcp).
 
 ## Tools
 
-| Tool | |
-| --- | --- |
-| `ListDatabases` | names of the configured databases |
-| `ListTables` | tables in a database |
-| `DescribeTable` | columns, types and keys of a table |
-| `ReadData` | run a query |
-| `InsertData` / `UpdateData` | write rows |
-| `CreateTable` / `DropTable` | change the schema |
+| Tool | | Writes |
+| --- | --- | --- |
+| `ListDatabases` | names of the configured databases | |
+| `ListTables` | tables in a database | |
+| `DescribeTable` | columns, types and keys of a table | |
+| `ReadData` | run a `SELECT` query | |
+| `InsertData` / `UpdateData` | write rows | ✔ |
+| `CreateTable` / `DropTable` | change the schema | ✔ |
 
 Every tool except `ListDatabases` takes a `database` argument. With one database configured you can
 omit it; with two or more it is required, and a call without it returns the list of names.
+
+`ReadData` only runs plain `SELECT` queries (CTEs, `UNION` and `FOR JSON` included). Anything that
+could change state is rejected before it reaches the server: DML, DDL, `EXEC`, `SELECT ... INTO`,
+`OPENQUERY` / `OPENROWSET` / `OPENDATASOURCE` and `NEXT VALUE FOR`. Set [`ReadOnly`](#read-only-mode)
+to hide the write tools altogether.
 
 ## Install
 
@@ -104,7 +109,8 @@ Connection string examples:
 
 ### 3. Verify
 
-Restart the client and run `/mcp` in Claude Code — `mssql` should show as connected with 8 tools.
+Restart the client and run `/mcp` in Claude Code — `mssql` should show as connected with 8 tools
+(4 in [read-only mode](#read-only-mode)).
 Then ask: *"using mssql, list the tables in sales"*.
 
 ## Configuration reference
@@ -127,9 +133,28 @@ To use a file instead of environment variables, copy
   "ConnectionStrings": {
     "sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True",
     "hr": "Server=.;Database=HR;Trusted_Connection=True;TrustServerCertificate=True"
-  }
+  },
+  "ReadOnly": false
 }
 ```
+
+### Read-only mode
+
+Set `ReadOnly` to `true` and the server never registers `InsertData`, `UpdateData`, `CreateTable` or
+`DropTable` — the client sees only `ListDatabases`, `ListTables`, `DescribeTable` and `ReadData`. It
+follows the same cascade as everything else: `"ReadOnly": true` in `appsettings.json`, a `ReadOnly`
+environment variable, or `--ReadOnly=true`:
+
+```sh
+claude mcp add mssql-prod \
+  --env ReadOnly=true \
+  --env ConnectionStrings__prod="Server=tcp:myserver.database.windows.net,1433;Initial Catalog=Prod;Encrypt=Mandatory;Authentication=Active Directory Default" \
+  -- C:\tools\MssqlMcp.exe
+```
+
+The switch covers the whole server. To keep some databases writable, register a second server entry
+without it. The server-side checks are a guardrail. For a hard guarantee, also connect with a login
+that can only read (for example, a user in `db_datareader` only).
 
 ## Troubleshooting
 
@@ -150,13 +175,16 @@ with a self-signed certificate).
 **A database seems missing.** Check the double underscore in `ConnectionStrings__sales` — a single
 one is ignored silently.
 
-**Azure SQL sign-in loops or prompts repeatedly.** Prefer `Authentication=Active Directory Default`
+**Azure SQL sign-in loops or prompts repeatedly.** Entra ID authentication is built into the
+binary (SqlClient 7 ships it as a separate package, which is bundled), so no extra install is
+needed. Prefer `Authentication=Active Directory Default`
 over `Active Directory Interactive`, which prompts once per distinct connection string. If "Default"
 fails with "Task canceled", fall back to "Interactive".
 
 ## Build from source
 
-Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) —
+[`MssqlMcp/global.json`](MssqlMcp/global.json) pins it to 10.0 or a later feature band.
 
 ```sh
 cd MssqlMcp
@@ -185,16 +213,20 @@ dotnet test --filter "FullyQualifiedName~ReadData"   # a single test or class
 
 (On Windows `cmd`, use `SET CONNECTION_STRING=...` without quotes.)
 
+Tests use xunit.v3 on the Microsoft Testing Platform runner, which `global.json` opts `dotnet test`
+into. The `--filter` syntax above still works; `--filter-class` / `--filter-method` are the native
+alternatives.
+
 ## Releasing
 
 Push a `v*` tag; [`.github/workflows/release.yml`](.github/workflows/release.yml) cross-publishes the
 three binaries and creates the GitHub release:
 
 ```sh
-git tag v1.0.1 && git push origin v1.0.1
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
-The tag name becomes the assembly version. Each binary is ~76 MB because it bundles the runtime;
+The tag name becomes the assembly version. Each binary is ~93 MB because it bundles the runtime and the Entra ID libraries;
 trimming stays off since `Microsoft.Data.SqlClient` breaks under it.
 
 ## License

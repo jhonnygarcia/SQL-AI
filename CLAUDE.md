@@ -12,8 +12,11 @@ tags.
 
 ## MssqlMcp — MCP server for SQL Server / Azure SQL
 
-.NET 8 console app using the official MCP C# SDK (`ModelContextProtocol`, preview package),
-speaking MCP over **stdio**.
+.NET 10 console app using the official MCP C# SDK (`ModelContextProtocol` 2.x), speaking MCP over
+**stdio**. `MssqlMcp/global.json` pins the SDK to 10.0 and opts `dotnet test` into the Microsoft
+Testing Platform runner that xunit.v3 needs (the old VSTest path errors on the .NET 10 SDK).
+`Microsoft.Data.SqlClient` 7 moved Entra ID auth into `Microsoft.Data.SqlClient.Extensions.Azure`;
+keep that package referenced or `Authentication=Active Directory ...` connection strings break.
 
 ```sh
 cd MssqlMcp
@@ -46,9 +49,16 @@ the configured databases. There is no in-memory/fake DB path.
 
 ### Architecture
 
-- `Program.cs` — host setup only. `AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly()`
-  discovers tools by reflection, so a new tool needs no registration. Console logging goes to
-  **stderr** (stdout is the MCP channel — never `Console.WriteLine` from tool code).
+- `Program.cs` — host setup only. Tools are registered with `.WithTools(...)` from
+  `ToolRegistry.GetToolMethods(readOnly)`, which reflects over every `[McpServerTool]` method on
+  `Tools`, so a new tool needs no registration. When the `ReadOnly` setting is true, tools whose
+  attribute says `ReadOnly = false` are left out entirely. `ToolRegistry.CreateTool` binds every
+  call to the `Tools` DI singleton (it has no parameterless constructor) and keeps the method name
+  as the tool name — the SDK would otherwise publish `read_data`-style snake_case names. Console logging goes to **stderr**
+  (stdout is the MCP channel — never `Console.WriteLine` from tool code).
+- `ReadOnlySqlValidator` — parses SQL with ScriptDom and accepts only plain `SELECT` batches
+  (no `INTO`, `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE`, `NEXT VALUE FOR`). `ReadData` calls it
+  before opening a connection, in every mode.
 - `Tools/Tools.cs` — `[McpServerToolType] public partial class Tools`, registered as a DI
   singleton, holds `ISqlConnectionFactory` + `ILogger` via primary constructor.
 - `Tools/*.cs` — one file per tool, each a `public partial class Tools` continuation with a
@@ -71,8 +81,10 @@ Match the existing tools exactly when adding one:
   do not cache connections. The acquisition call must sit inside the `try` block: name resolution
   throws for an unknown or omitted-but-required database, and a tool must never throw across the
   MCP boundary.
+- The `ReadOnly` hint is load-bearing: it decides whether the tool is exposed in read-only mode.
+  Set it to `false` on anything that can change state.
 - Data-manipulation tools (`ReadData`, `InsertData`, `UpdateData`, `CreateTable`, `DropTable`)
-  take a raw SQL string by design. Metadata tools (`DescribeTable`, `ListTables`) query `sys.*`
+  take a raw SQL string by design; `ReadData`'s is validated as SELECT-only. Metadata tools (`DescribeTable`, `ListTables`) query `sys.*`
   views with `@`-parameters — keep parameterizing there.
 
 ### Style
