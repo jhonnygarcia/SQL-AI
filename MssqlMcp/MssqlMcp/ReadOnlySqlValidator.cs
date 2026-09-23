@@ -20,7 +20,7 @@ public static class ReadOnlySqlValidator
             return false;
         }
 
-        var parser = new TSql170Parser(initialQuotedIdentifiers: true);
+        var parser = new TSql180Parser(initialQuotedIdentifiers: true);
         TSqlFragment fragment;
         IList<ParseError> errors;
         using (var reader = new StringReader(sql))

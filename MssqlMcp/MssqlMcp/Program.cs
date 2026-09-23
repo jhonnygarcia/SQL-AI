@@ -5,7 +5,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ModelContextProtocol.Server;
 
 namespace Mssql.McpServer;
 
@@ -47,7 +46,7 @@ internal class Program
         _ = builder.Services
             .AddMcpServer()
             .WithStdioServerTransport()
-            .WithTools(toolMethods.Select(method => McpServerTool.Create(method, typeof(Tools))));
+            .WithTools(toolMethods.Select(ToolRegistry.CreateTool));
 
         // Build the host
         var host = builder.Build();

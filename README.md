@@ -1,4 +1,4 @@
-# MSSQL MCP Server (.NET 8)
+# MSSQL MCP Server (.NET 10)
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an AI agent list,
 describe, query and modify tables in SQL Server and Azure SQL. It speaks MCP over stdio and can
@@ -175,13 +175,16 @@ with a self-signed certificate).
 **A database seems missing.** Check the double underscore in `ConnectionStrings__sales` — a single
 one is ignored silently.
 
-**Azure SQL sign-in loops or prompts repeatedly.** Prefer `Authentication=Active Directory Default`
+**Azure SQL sign-in loops or prompts repeatedly.** Entra ID authentication is built into the
+binary (SqlClient 7 ships it as a separate package, which is bundled), so no extra install is
+needed. Prefer `Authentication=Active Directory Default`
 over `Active Directory Interactive`, which prompts once per distinct connection string. If "Default"
 fails with "Task canceled", fall back to "Interactive".
 
 ## Build from source
 
-Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) —
+[`MssqlMcp/global.json`](MssqlMcp/global.json) pins it to 10.0 or a later feature band.
 
 ```sh
 cd MssqlMcp
@@ -210,6 +213,10 @@ dotnet test --filter "FullyQualifiedName~ReadData"   # a single test or class
 
 (On Windows `cmd`, use `SET CONNECTION_STRING=...` without quotes.)
 
+Tests use xunit.v3 on the Microsoft Testing Platform runner, which `global.json` opts `dotnet test`
+into. The `--filter` syntax above still works; `--filter-class` / `--filter-method` are the native
+alternatives.
+
 ## Releasing
 
 Push a `v*` tag; [`.github/workflows/release.yml`](.github/workflows/release.yml) cross-publishes the
@@ -219,7 +226,7 @@ three binaries and creates the GitHub release:
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
-The tag name becomes the assembly version. Each binary is ~76 MB because it bundles the runtime;
+The tag name becomes the assembly version. Each binary is ~93 MB because it bundles the runtime and the Entra ID libraries;
 trimming stays off since `Microsoft.Data.SqlClient` breaks under it.
 
 ## License

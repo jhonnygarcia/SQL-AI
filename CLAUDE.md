@@ -12,8 +12,11 @@ tags.
 
 ## MssqlMcp — MCP server for SQL Server / Azure SQL
 
-.NET 8 console app using the official MCP C# SDK (`ModelContextProtocol`, preview package),
-speaking MCP over **stdio**.
+.NET 10 console app using the official MCP C# SDK (`ModelContextProtocol` 2.x), speaking MCP over
+**stdio**. `MssqlMcp/global.json` pins the SDK to 10.0 and opts `dotnet test` into the Microsoft
+Testing Platform runner that xunit.v3 needs (the old VSTest path errors on the .NET 10 SDK).
+`Microsoft.Data.SqlClient` 7 moved Entra ID auth into `Microsoft.Data.SqlClient.Extensions.Azure`;
+keep that package referenced or `Authentication=Active Directory ...` connection strings break.
 
 ```sh
 cd MssqlMcp
@@ -49,7 +52,9 @@ the configured databases. There is no in-memory/fake DB path.
 - `Program.cs` — host setup only. Tools are registered with `.WithTools(...)` from
   `ToolRegistry.GetToolMethods(readOnly)`, which reflects over every `[McpServerTool]` method on
   `Tools`, so a new tool needs no registration. When the `ReadOnly` setting is true, tools whose
-  attribute says `ReadOnly = false` are left out entirely. Console logging goes to **stderr**
+  attribute says `ReadOnly = false` are left out entirely. `ToolRegistry.CreateTool` binds every
+  call to the `Tools` DI singleton (it has no parameterless constructor) and keeps the method name
+  as the tool name — the SDK would otherwise publish `read_data`-style snake_case names. Console logging goes to **stderr**
   (stdout is the MCP channel — never `Console.WriteLine` from tool code).
 - `ReadOnlySqlValidator` — parses SQL with ScriptDom and accepts only plain `SELECT` batches
   (no `INTO`, `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE`, `NEXT VALUE FOR`). `ReadData` calls it

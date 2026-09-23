@@ -14,7 +14,7 @@ public partial class Tools
         ReadOnly = true,
         Idempotent = true,
         Destructive = false),
-        Description("Executes a read-only SELECT query against SQL Database. Statements that modify data or schema, EXEC, SELECT INTO and OPENQUERY/OPENROWSET are rejected.")]
+        Description("Executes a read-only SELECT query against SQL Database. Statements that modify data or schema, EXEC, SELECT INTO, OPENQUERY/OPENROWSET/OPENDATASOURCE and NEXT VALUE FOR are rejected.")]
     public async Task<DbOperationResult> ReadData(
         [Description("SELECT query to execute")] string sql,
         [Description("Name of the configured database to run against. Call ListDatabases to see the available names.")] string? database = null)
