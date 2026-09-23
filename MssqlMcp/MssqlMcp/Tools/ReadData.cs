@@ -14,13 +14,21 @@ public partial class Tools
         ReadOnly = true,
         Idempotent = true,
         Destructive = false),
-        Description("Executes SQL queries against SQL Database to read data")]
+        Description("Executes a read-only SELECT query against SQL Database. Statements that modify data or schema, EXEC, SELECT INTO and OPENQUERY/OPENROWSET are rejected.")]
     public async Task<DbOperationResult> ReadData(
-        [Description("SQL query to execute")] string sql,
+        [Description("SELECT query to execute")] string sql,
         [Description("Name of the configured database to run against. Call ListDatabases to see the available names.")] string? database = null)
     {
         try
         {
+            // ReadData is annotated ReadOnly, so clients may run it unprompted; refuse anything
+            // that is not a plain SELECT before a connection is ever opened.
+            if (!ReadOnlySqlValidator.IsReadOnlyQuery(sql, out var reason))
+            {
+                _logger.LogWarning("ReadData rejected a query on database {Database}: {Reason}", database ?? "(default)", reason);
+                return new DbOperationResult(success: false, error: reason);
+            }
+
             var conn = await _connectionFactory.GetOpenConnectionAsync(database);
             using (conn)
             {

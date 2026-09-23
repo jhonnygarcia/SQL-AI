@@ -119,6 +119,29 @@ namespace MssqlMcp.Tests
         }
 
         [Fact]
+        public async Task ReadData_RefusesToModifyData()
+        {
+            var createResult = await _tools.CreateTable($"CREATE TABLE {_tableName} (Id INT PRIMARY KEY)") as DbOperationResult;
+            Assert.NotNull(createResult);
+            Assert.True(createResult.Success);
+            var insertResult = await _tools.InsertData($"INSERT INTO {_tableName} (Id) VALUES (1)") as DbOperationResult;
+            Assert.NotNull(insertResult);
+            Assert.True(insertResult.Success);
+
+            var result = await _tools.ReadData($"DELETE FROM {_tableName}") as DbOperationResult;
+            Assert.NotNull(result);
+            Assert.False(result.Success);
+            Assert.Contains("Only SELECT queries are allowed", result.Error ?? string.Empty, StringComparison.Ordinal);
+
+            // The row must still be there: the DELETE never reached the server.
+            var readResult = await _tools.ReadData($"SELECT * FROM {_tableName}") as DbOperationResult;
+            Assert.NotNull(readResult);
+            Assert.True(readResult.Success);
+            var rows = Assert.IsAssignableFrom<List<Dictionary<string, object?>>>(readResult.Data);
+            Assert.Single(rows);
+        }
+
+        [Fact]
         public async Task UpdateData_ReturnsSuccess_WhenSqlIsValid()
         {
             // Ensure table exists and has data

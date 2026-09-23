@@ -9,17 +9,22 @@ lives in [`MssqlMcp/`](MssqlMcp).
 
 ## Tools
 
-| Tool | |
-| --- | --- |
-| `ListDatabases` | names of the configured databases |
-| `ListTables` | tables in a database |
-| `DescribeTable` | columns, types and keys of a table |
-| `ReadData` | run a query |
-| `InsertData` / `UpdateData` | write rows |
-| `CreateTable` / `DropTable` | change the schema |
+| Tool | | Writes |
+| --- | --- | --- |
+| `ListDatabases` | names of the configured databases | |
+| `ListTables` | tables in a database | |
+| `DescribeTable` | columns, types and keys of a table | |
+| `ReadData` | run a `SELECT` query | |
+| `InsertData` / `UpdateData` | write rows | ✔ |
+| `CreateTable` / `DropTable` | change the schema | ✔ |
 
 Every tool except `ListDatabases` takes a `database` argument. With one database configured you can
 omit it; with two or more it is required, and a call without it returns the list of names.
+
+`ReadData` only runs plain `SELECT` queries (CTEs, `UNION` and `FOR JSON` included). Anything that
+could change state is rejected before it reaches the server: DML, DDL, `EXEC`, `SELECT ... INTO`,
+`OPENQUERY` / `OPENROWSET` / `OPENDATASOURCE` and `NEXT VALUE FOR`. Set [`ReadOnly`](#read-only-mode)
+to hide the write tools altogether.
 
 ## Install
 
@@ -104,7 +109,8 @@ Connection string examples:
 
 ### 3. Verify
 
-Restart the client and run `/mcp` in Claude Code — `mssql` should show as connected with 8 tools.
+Restart the client and run `/mcp` in Claude Code — `mssql` should show as connected with 8 tools
+(4 in [read-only mode](#read-only-mode)).
 Then ask: *"using mssql, list the tables in sales"*.
 
 ## Configuration reference
@@ -127,9 +133,28 @@ To use a file instead of environment variables, copy
   "ConnectionStrings": {
     "sales": "Server=.;Database=Sales;Trusted_Connection=True;TrustServerCertificate=True",
     "hr": "Server=.;Database=HR;Trusted_Connection=True;TrustServerCertificate=True"
-  }
+  },
+  "ReadOnly": false
 }
 ```
+
+### Read-only mode
+
+Set `ReadOnly` to `true` and the server never registers `InsertData`, `UpdateData`, `CreateTable` or
+`DropTable` — the client sees only `ListDatabases`, `ListTables`, `DescribeTable` and `ReadData`. It
+follows the same cascade as everything else: `"ReadOnly": true` in `appsettings.json`, a `ReadOnly`
+environment variable, or `--ReadOnly=true`:
+
+```sh
+claude mcp add mssql-prod \
+  --env ReadOnly=true \
+  --env ConnectionStrings__prod="Server=tcp:myserver.database.windows.net,1433;Initial Catalog=Prod;Encrypt=Mandatory;Authentication=Active Directory Default" \
+  -- C:\tools\MssqlMcp.exe
+```
+
+The switch covers the whole server. To keep some databases writable, register a second server entry
+without it. The server-side checks are a guardrail. For a hard guarantee, also connect with a login
+that can only read (for example, a user in `db_datareader` only).
 
 ## Troubleshooting
 
@@ -191,7 +216,7 @@ Push a `v*` tag; [`.github/workflows/release.yml`](.github/workflows/release.yml
 three binaries and creates the GitHub release:
 
 ```sh
-git tag v1.0.1 && git push origin v1.0.1
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
 The tag name becomes the assembly version. Each binary is ~76 MB because it bundles the runtime;

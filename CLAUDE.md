@@ -46,9 +46,14 @@ the configured databases. There is no in-memory/fake DB path.
 
 ### Architecture
 
-- `Program.cs` — host setup only. `AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly()`
-  discovers tools by reflection, so a new tool needs no registration. Console logging goes to
-  **stderr** (stdout is the MCP channel — never `Console.WriteLine` from tool code).
+- `Program.cs` — host setup only. Tools are registered with `.WithTools(...)` from
+  `ToolRegistry.GetToolMethods(readOnly)`, which reflects over every `[McpServerTool]` method on
+  `Tools`, so a new tool needs no registration. When the `ReadOnly` setting is true, tools whose
+  attribute says `ReadOnly = false` are left out entirely. Console logging goes to **stderr**
+  (stdout is the MCP channel — never `Console.WriteLine` from tool code).
+- `ReadOnlySqlValidator` — parses SQL with ScriptDom and accepts only plain `SELECT` batches
+  (no `INTO`, `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE`, `NEXT VALUE FOR`). `ReadData` calls it
+  before opening a connection, in every mode.
 - `Tools/Tools.cs` — `[McpServerToolType] public partial class Tools`, registered as a DI
   singleton, holds `ISqlConnectionFactory` + `ILogger` via primary constructor.
 - `Tools/*.cs` — one file per tool, each a `public partial class Tools` continuation with a
@@ -71,8 +76,10 @@ Match the existing tools exactly when adding one:
   do not cache connections. The acquisition call must sit inside the `try` block: name resolution
   throws for an unknown or omitted-but-required database, and a tool must never throw across the
   MCP boundary.
+- The `ReadOnly` hint is load-bearing: it decides whether the tool is exposed in read-only mode.
+  Set it to `false` on anything that can change state.
 - Data-manipulation tools (`ReadData`, `InsertData`, `UpdateData`, `CreateTable`, `DropTable`)
-  take a raw SQL string by design. Metadata tools (`DescribeTable`, `ListTables`) query `sys.*`
+  take a raw SQL string by design; `ReadData`'s is validated as SELECT-only. Metadata tools (`DescribeTable`, `ListTables`) query `sys.*`
   views with `@`-parameters — keep parameterizing there.
 
 ### Style

@@ -1,9 +1,11 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Server;
 
 namespace Mssql.McpServer;
 
@@ -36,14 +38,26 @@ internal class Program
         _ = builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
         _ = builder.Services.AddSingleton<Tools>();
 
+        // Read-only mode drops every tool whose ReadOnly hint is false, so the client never sees
+        // a tool that can write.
+        var readOnly = builder.Configuration.GetValue<bool>("ReadOnly");
+        var toolMethods = ToolRegistry.GetToolMethods(readOnly);
+
         // Register MCP server and tools (instance-based)
         _ = builder.Services
             .AddMcpServer()
             .WithStdioServerTransport()
-            .WithToolsFromAssembly();
+            .WithTools(toolMethods.Select(method => McpServerTool.Create(method, typeof(Tools))));
 
         // Build the host
         var host = builder.Build();
+
+        if (readOnly)
+        {
+            host.Services.GetRequiredService<ILogger<Program>>().LogInformation(
+                "Read-only mode: exposing {Tools}",
+                string.Join(", ", toolMethods.Select(method => method.Name)));
+        }
 
         // Setup cancellation token for graceful shutdown (Ctrl+C or SIGTERM)
         using var cts = new CancellationTokenSource();
